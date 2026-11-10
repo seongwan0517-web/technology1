@@ -82,17 +82,17 @@
                 <!-- LOGIN FORM -->
                 <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">이메일 주소</label>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">아이디 또는 이메일</label>
                         <div class="relative">
-                            <i class="fa-solid fa-envelope absolute left-3.5 top-3.5 text-slate-400"></i>
-                            <input type="email" id="loginEmail" required placeholder="example@school.kr (관리자는 admin@school.kr)" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm transition-all">
+                            <i class="fa-solid fa-user absolute left-3.5 top-3.5 text-slate-400"></i>
+                            <input type="text" id="loginEmail" required placeholder="아이디 입력 (관리자는 admin)" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm transition-all">
                         </div>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-600 uppercase mb-1">비밀번호</label>
                         <div class="relative">
                             <i class="fa-solid fa-lock absolute left-3.5 top-3.5 text-slate-400"></i>
-                            <input type="password" id="loginPw" required placeholder="비밀번호 입력" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm transition-all">
+                            <input type="password" id="loginPw" required placeholder="비밀번호 입력 (예: 1234)" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm transition-all">
                         </div>
                     </div>
                     
@@ -101,7 +101,7 @@
                             <input type="checkbox" id="isAdminCheck" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
                             <span class="font-semibold text-amber-700">교사 관리자(Admin) 로그인</span>
                         </label>
-                        <span class="text-indigo-600 font-semibold cursor-pointer hover:underline" onclick="showToast('비밀번호 분실 시 담당 교사에게 문의하세요.', 'info')">도움말</span>
+                        <span class="text-indigo-600 font-semibold cursor-pointer hover:underline" onclick="showToast('관리자 계정: admin / 비밀번호: 1234', 'info')">계정 정보</span>
                     </div>
 
                     <button type="submit" class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all duration-200 text-sm flex items-center justify-center gap-2">
@@ -120,12 +120,12 @@
                         </div>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">이메일 계정</label>
-                        <input type="email" id="signupEmail" required placeholder="학생 이메일 입력" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">아이디 또는 이메일</label>
+                        <input type="text" id="signupEmail" required placeholder="원하는 아이디 입력 (예: student01)" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">비밀번호 (6자리 이상)</label>
-                        <input type="password" id="signupPw" minlength="6" required placeholder="비밀번호 설정" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">비밀번호</label>
+                        <input type="password" id="signupPw" required placeholder="비밀번호 설정 (예: 1234)" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
                     </div>
 
                     <button type="submit" class="w-full py-3.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow-md transition-all text-sm flex items-center justify-center gap-2">
@@ -599,8 +599,29 @@
         const db = getDatabase(app);
 
         // Security Hash for Admin Password Verification ('1234' SHA-256 hash representation)
-        // Plaintext password '1234' is NEVER stored in source code.
         const ADMIN_PW_HASH = "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4";
+
+        // --- HELPER FUNCTIONS FOR EMAIL & SHORT PASSWORDS ---
+        // Converts plain ID like "admin" or "student01" to "admin@tech.com"
+        function formatFirebaseEmail(input) {
+            const trimmed = (input || '').trim();
+            if (!trimmed) return '';
+            return trimmed.includes('@') ? trimmed : `${trimmed}@tech.com`;
+        }
+
+        // Seamlessly pads 4-digit password like "1234" to "123400" to satisfy Firebase Auth 6-character minimum
+        function formatFirebasePassword(pw) {
+            if (!pw) return '';
+            return pw.length < 6 ? pw.padEnd(6, '0') : pw;
+        }
+
+        // SHA-256 Helper Function for raw password check
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
 
         // Global State
         let currentUserState = null;
@@ -634,14 +655,6 @@
 
         let scoreChartInstance = null;
 
-        // SHA-256 Helper Function
-        async function sha256(message) {
-            const msgBuffer = new TextEncoder().encode(message);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        }
-
         // --- AUTHENTICATION LISTENERS & HANDLERS ---
         onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -650,18 +663,20 @@
                 let profile = userSnapshot.exists() ? userSnapshot.val() : null;
 
                 if (!profile) {
+                    const email = user.email || '';
+                    const isAdmin = email.startsWith('admin') || email === 'admin@tech.com';
                     profile = {
                         uid: user.uid,
-                        email: user.email,
-                        name: user.displayName || user.email.split('@')[0],
-                        studentId: '20101',
-                        role: (user.email === 'admin@school.kr') ? 'admin' : 'student'
+                        email: email,
+                        name: isAdmin ? '김교사 (관리자)' : (user.displayName || email.split('@')[0]),
+                        studentId: isAdmin ? 'TEACHER' : '20101',
+                        role: isAdmin ? 'admin' : 'student'
                     };
                     await set(ref(db, `users/${user.uid}`), profile);
                 }
 
                 currentUserState = profile;
-                showToast(`${currentUserState.name}님 반가워요!`, 'success');
+                showToast(`${currentUserState.name}님 환영합니다!`, 'success');
                 showMainApp();
                 initRealtimeListeners();
             } else {
@@ -670,22 +685,28 @@
             }
         });
 
-        // Email / Password Login
+        // Email / Password Login Handler
         window.handleLogin = async function(e) {
             e.preventDefault();
-            const email = document.getElementById('loginEmail').value.trim();
-            const pw = document.getElementById('loginPw').value.trim();
+            const rawId = document.getElementById('loginEmail').value.trim();
+            const rawPw = document.getElementById('loginPw').value.trim();
             const isAdminCheck = document.getElementById('isAdminCheck').checked;
 
+            const email = formatFirebaseEmail(rawId);
+            const fbPw = formatFirebasePassword(rawPw);
+
             try {
-                if (isAdminCheck) {
-                    const hashedInput = await sha256(pw);
-                    if (hashedInput === ADMIN_PW_HASH || email === 'admin@school.kr') {
-                        // Admin Hash Verified
-                        const userCred = await signInWithEmailAndPassword(auth, email, pw).catch(async () => {
-                            // If user doesn't exist in Firebase Auth yet, sign up default admin
-                            return await createUserWithEmailAndPassword(auth, email, pw);
-                        });
+                // Admin login check
+                if (isAdminCheck || rawId === 'admin' || email === 'admin@tech.com') {
+                    const hashedInput = await sha256(rawPw);
+                    if (hashedInput === ADMIN_PW_HASH || rawPw === '1234') {
+                        let userCred;
+                        try {
+                            userCred = await signInWithEmailAndPassword(auth, email, fbPw);
+                        } catch (signInErr) {
+                            // If admin user does not exist in Firebase Auth yet, auto-register
+                            userCred = await createUserWithEmailAndPassword(auth, email, fbPw);
+                        }
                         
                         const adminProfile = {
                             uid: userCred.user.uid,
@@ -699,27 +720,31 @@
                         showToast('교사 관리자 인증에 성공했습니다.', 'success');
                         return;
                     } else {
-                        showToast('관리자 비밀번호 인증에 실패했습니다.', 'error');
+                        showToast('관리자 비밀번호가 일치하지 않습니다.', 'error');
                         return;
                     }
                 }
 
-                await signInWithEmailAndPassword(auth, email, pw);
+                // Normal Student Login
+                await signInWithEmailAndPassword(auth, email, fbPw);
             } catch (err) {
                 showToast(`로그인 실패: ${err.message}`, 'error');
             }
         };
 
-        // Email Signup
+        // Signup Handler
         window.handleSignup = async function(e) {
             e.preventDefault();
             const studentId = document.getElementById('signupStudentId').value.trim();
             const name = document.getElementById('signupName').value.trim();
-            const email = document.getElementById('signupEmail').value.trim();
-            const pw = document.getElementById('signupPw').value.trim();
+            const rawEmail = document.getElementById('signupEmail').value.trim();
+            const rawPw = document.getElementById('signupPw').value.trim();
+
+            const email = formatFirebaseEmail(rawEmail);
+            const fbPw = formatFirebasePassword(rawPw);
 
             try {
-                const userCred = await createUserWithEmailAndPassword(auth, email, pw);
+                const userCred = await createUserWithEmailAndPassword(auth, email, fbPw);
                 const user = userCred.user;
                 
                 const profile = {
@@ -727,7 +752,7 @@
                     email: email,
                     name: name,
                     studentId: studentId,
-                    role: "student"
+                    role: (rawEmail === 'admin' || email === 'admin@tech.com') ? 'admin' : 'student'
                 };
 
                 await set(ref(db, `users/${user.uid}`), profile);
@@ -796,7 +821,6 @@
                     const data = snapshot.val();
                     dbData.announcements = Object.keys(data).map(key => ({ id: key, ...data[key] })).reverse();
                 } else {
-                    // Seed initial data if empty
                     const initialAnnouncements = [
                         { title: "1학기 기술과 사회 수행평가 안내", content: "발명 아이디어 구상서 마감일은 금요일입니다.", date: "2026-03-10", author: "김교사" },
                         { title: "2단원 수송기술 교과서 PDF 자료 업로드", content: "자료실 탭에서 학습지를 확인하세요.", date: "2026-03-08", author: "김교사" }
